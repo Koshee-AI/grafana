@@ -1,0 +1,33 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: crane-tag
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Copies/tags an existing container image to a new tag using crane copy.
+  params:
+    - name: SOURCE
+      description: Source image reference (e.g., repo:tag-abc1234)
+      type: string
+    - name: TARGET
+      description: Target image reference (e.g., repo:main)
+      type: string
+  steps:
+    - name: copy-image
+      image: gcr.io/go-containerregistry/crane:v0.20.7
+      script: |
+        #!/bin/sh
+        set -ex
+        crane copy $(params.SOURCE) $(params.TARGET)
+        echo "Copied $(params.SOURCE) to $(params.TARGET)"
+      volumeMounts:
+        - mountPath: /root/.docker
+          name: docker-config
+  volumes:
+    - name: docker-config
+      secret:
+        secretName: harbor-registry-credentials
+        items:
+          - key: .dockerconfigjson
+            path: config.json

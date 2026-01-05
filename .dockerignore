@@ -21,4 +21,21 @@ node_modules
 !.yarn/releases
 !.yarn/plugins
 !.yarn/versions
-!.yarn/cache
+# Exclude cache - not needed with nodeLinker: node-modules
+# !.yarn/cache
+
+# Additional exclusions for smaller build context
+.github
+.tekton
+plans
+e2e
+devenv
+contribute
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__mocks__
+__snapshots__
+Makefile
+NOTICE.md

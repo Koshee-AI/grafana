@@ -1,0 +1,152 @@
+# Dockerfile.koshee
+# Multi-stage build for Koshee Grafana (multi-arch: amd64/arm64)
+
+# =============================================================================
+# Stage 1: Frontend Build
+# =============================================================================
+FROM node:22-alpine AS frontend-builder
+
+ENV NODE_OPTIONS=--max_old_space_size=8000
+
+WORKDIR /grafana
+
+# Install build dependencies
+RUN apk add --no-cache git python3 make g++
+
+# Copy package files first for better caching
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn .yarn
+COPY packages packages
+COPY public public
+COPY conf/defaults.ini ./conf/defaults.ini
+COPY LICENSE ./
+
+# Enable corepack and install dependencies
+# Note: Not using --immutable as peer deps may require lockfile updates during build
+RUN corepack enable && yarn install
+
+# Copy additional source files needed for build
+COPY tsconfig.json .browserslistrc ./
+COPY scripts scripts
+COPY emails emails
+
+# Copy remaining source code
+COPY . .
+
+# Build frontend
+RUN yarn build
+
+# =============================================================================
+# Stage 2: Backend Build
+# =============================================================================
+FROM golang:1.24.6-alpine AS backend-builder
+
+WORKDIR /grafana
+
+# Install build dependencies
+RUN apk add --no-cache git make
+
+# Copy go module files and local replace targets for caching
+COPY go.mod go.sum ./
+COPY apps apps
+COPY pkg/aggregator pkg/aggregator
+COPY pkg/apimachinery pkg/apimachinery
+COPY pkg/apiserver pkg/apiserver
+RUN go mod download
+
+# Copy remaining source code
+COPY . .
+
+# Build argument for target architecture
+ARG TARGETARCH=amd64
+
+# Build backend binary
+# CGO_ENABLED=0 - No CGO needed (using PostgreSQL, not SQLite)
+# -tags oss - Build open source version
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    go build \
+    -tags oss \
+    -ldflags "-w -s" \
+    -o ./bin/grafana \
+    ./pkg/cmd/grafana
+
+# Build grafana-cli
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    go build \
+    -tags oss \
+    -ldflags "-w -s" \
+    -o ./bin/grafana-cli \
+    ./pkg/cmd/grafana-cli
+
+# =============================================================================
+# Stage 3: Final Image
+# =============================================================================
+FROM alpine:3.19
+
+# Labels
+LABEL org.opencontainers.image.title="Koshee Dashboard"
+LABEL org.opencontainers.image.description="Koshee-branded Grafana for fleet monitoring"
+LABEL org.opencontainers.image.vendor="Koshee"
+LABEL org.opencontainers.image.source="https://github.com/koshee/grafana"
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    musl-utils \
+    bash
+
+# Create grafana user and group
+RUN addgroup -S grafana && adduser -S -G grafana grafana
+
+# Set up directory structure
+WORKDIR /usr/share/grafana
+
+# Copy binaries
+COPY --from=backend-builder /grafana/bin/grafana ./bin/
+COPY --from=backend-builder /grafana/bin/grafana-cli ./bin/
+
+# Copy frontend assets
+COPY --from=frontend-builder /grafana/public ./public
+
+# Copy configuration
+COPY --from=backend-builder /grafana/conf ./conf
+
+# Create data directories (including all provisioning subdirectories)
+RUN mkdir -p /var/lib/grafana /var/log/grafana \
+    /etc/grafana/provisioning/datasources \
+    /etc/grafana/provisioning/dashboards \
+    /etc/grafana/provisioning/notifiers \
+    /etc/grafana/provisioning/plugins \
+    /etc/grafana/provisioning/access-control \
+    /etc/grafana/provisioning/alerting && \
+    chown -R grafana:grafana /var/lib/grafana /var/log/grafana /etc/grafana /usr/share/grafana
+
+# Copy default configuration
+RUN cp /usr/share/grafana/conf/defaults.ini /etc/grafana/grafana.ini && \
+    chown grafana:grafana /etc/grafana/grafana.ini
+
+# Switch to non-root user
+USER grafana
+
+# Environment variables
+ENV PATH="/usr/share/grafana/bin:$PATH" \
+    GF_PATHS_CONFIG=/etc/grafana/grafana.ini \
+    GF_PATHS_DATA=/var/lib/grafana \
+    GF_PATHS_LOGS=/var/log/grafana \
+    GF_PATHS_PLUGINS=/var/lib/grafana/plugins \
+    GF_PATHS_PROVISIONING=/etc/grafana/provisioning \
+    GF_PATHS_HOME=/usr/share/grafana
+
+# Expose port
+EXPOSE 3000
+
+# Copy run script
+COPY packaging/docker/run.sh /run.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1
+
+# Entrypoint
+ENTRYPOINT ["/run.sh"]

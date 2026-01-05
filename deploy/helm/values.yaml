@@ -1,0 +1,41 @@
+# Default values for grafana-koshee
+# This file contains defaults that can be overridden per environment
+
+grafana:
+  # Replica count
+  replicas: 1
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  # Grafana configuration
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/"
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+    security:
+      disable_gravatar: true
+    users:
+      allow_sign_up: false
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Ingress disabled by default (configured per environment)
+  ingress:
+    enabled: false

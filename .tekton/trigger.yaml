@@ -1,0 +1,113 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: grafana-listener
+  namespace: tekton-pipelines
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: grafana-push
+      interceptors:
+        # Validate GitHub webhook signature
+        - ref:
+            name: github
+          params:
+            - name: secretRef
+              value:
+                secretName: github-webhook-secret
+                secretKey: secret
+            - name: eventTypes
+              value: ["push"]
+        # Filter to main branch only
+        - ref:
+            name: cel
+          params:
+            - name: filter
+              value: "body.ref == 'refs/heads/main'"
+      bindings:
+        - ref: grafana-binding
+      template:
+        ref: grafana-trigger-template
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: grafana-binding
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+      value: $(body.after)
+    - name: git-url
+      value: $(body.repository.clone_url)
+    - name: git-revision-short
+      value: $(body.after[0:7])
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: grafana-trigger-template
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+      description: Git commit SHA
+    - name: git-url
+      description: Git repository URL
+    - name: git-revision-short
+      description: Short commit SHA for tagging
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: grafana-build-
+        namespace: tekton-pipelines
+        labels:
+          app.kubernetes.io/name: grafana
+          app.kubernetes.io/component: build
+          tekton.koshee.io/trigger: github-push
+      spec:
+        pipelineRef:
+          name: grafana-build
+        timeouts:
+          pipeline: 1h
+        params:
+          - name: git-url
+            value: $(tt.params.git-url)
+          - name: git-revision
+            value: $(tt.params.git-revision)
+          - name: image-tag
+            value: main-$(tt.params.git-revision-short)
+        workspaces:
+          - name: source
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 10Gi
+                storageClassName: longhorn
+        podTemplate:
+          securityContext:
+            fsGroup: 65532
+---
+# Ingress route for Cloudflare Tunnel
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-tekton-webhook
+  namespace: tekton-pipelines
+spec:
+  ingressClassName: cloudflare-tunnel
+  rules:
+    - host: tekton.koshee.io
+      http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: el-grafana-listener
+                port:
+                  number: 8080

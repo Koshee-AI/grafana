@@ -1,0 +1,54 @@
+# Koshee environment values
+# This file contains overrides for the Koshee deployment
+
+grafana:
+  # Use Koshee-branded Grafana image from Harbor
+  image:
+    registry: harbor.kw.koshee.io
+    repository: koshee/grafana
+    tag: main  # Managed by ArgoCD Image Updater
+    pullPolicy: IfNotPresent
+    pullSecrets:
+      - harbor-pull-secret
+
+  # Koshee-specific Grafana configuration
+  grafana.ini:
+    server:
+      root_url: "https://dashboard.koshee.io/"
+    auth:
+      disable_login_form: false
+    auth.anonymous:
+      enabled: false
+
+  # Enable persistence with Longhorn
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+
+  # Ingress for Koshee environment
+  ingress:
+    enabled: true
+    ingressClassName: cloudflare-tunnel
+    hosts:
+      - dashboard.koshee.io
+    tls: []  # TLS handled by Cloudflare
+
+  # Sidecar for loading dashboards and datasources from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+
+  # Admin credentials - set by consuming charts
+  # admin:
+  #   existingSecret: <secret-name>
+  #   userKey: admin-user
+  #   passwordKey: admin-password
+
+  # Datasources - configured by consuming charts via ConfigMaps with label grafana_datasource: "1"

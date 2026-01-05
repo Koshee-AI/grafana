@@ -1,0 +1,98 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: grafana-build
+  namespace: tekton-pipelines
+spec:
+  description: Build Koshee Grafana multi-arch images
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL
+    - name: git-revision
+      type: string
+      description: Git revision (commit SHA or branch)
+    - name: image-tag
+      type: string
+      description: Image tag (typically commit SHA)
+  workspaces:
+    - name: source
+      description: Workspace for cloned source code
+    # Note: Docker credentials are provided by tasks via harbor-registry-credentials secret
+
+  tasks:
+    # Clone the repository
+    - name: git-clone
+      taskRef:
+        name: git-clone
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+      workspaces:
+        - name: output
+          workspace: source
+
+    # Build amd64 container image with Kaniko
+    # Note: Dockerfile.koshee handles frontend and backend builds internally
+    - name: build-image-amd64
+      runAfter: [git-clone]
+      taskRef:
+        name: kaniko-build
+      params:
+        - name: IMAGE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
+        - name: DOCKERFILE
+          value: Dockerfile.koshee
+        - name: EXTRA_ARGS
+          value:
+            - --build-arg=TARGETARCH=amd64
+            - --cache=true
+            - --cache-repo=harbor.kw.koshee.io/koshee/grafana-cache
+      workspaces:
+        - name: source
+          workspace: source
+
+    # Build arm64 container image with Kaniko
+    - name: build-image-arm64
+      runAfter: [git-clone]
+      taskRef:
+        name: kaniko-build
+      params:
+        - name: IMAGE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
+        - name: DOCKERFILE
+          value: Dockerfile.koshee
+        - name: EXTRA_ARGS
+          value:
+            - --build-arg=TARGETARCH=arm64
+            - --cache=true
+            - --cache-repo=harbor.kw.koshee.io/koshee/grafana-cache
+      workspaces:
+        - name: source
+          workspace: source
+
+    # Assemble multi-arch manifest with crane
+    - name: create-manifest
+      runAfter: [build-image-amd64, build-image-arm64]
+      taskRef:
+        name: crane-manifest
+      params:
+        - name: IMAGE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)
+        - name: AMD64_IMAGE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
+        - name: ARM64_IMAGE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
+
+    # Tag as main for branch builds
+    - name: tag-main
+      runAfter: [create-manifest]
+      taskRef:
+        name: crane-tag
+      params:
+        - name: SOURCE
+          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)
+        - name: TARGET
+          value: harbor.kw.koshee.io/koshee/grafana:main
