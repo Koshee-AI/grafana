@@ -10,8 +10,8 @@ ENV NODE_OPTIONS=--max_old_space_size=8000
 
 WORKDIR /grafana
 
-# Install build dependencies
-RUN apk add --no-cache git python3 make g++
+# Install build dependencies (rust/cargo needed for tree-sitter native compilation)
+RUN apk add --no-cache git python3 make g++ rust cargo
 
 # Copy package files first for better caching
 COPY package.json yarn.lock .yarnrc.yml ./
