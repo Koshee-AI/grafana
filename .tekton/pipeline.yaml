@@ -18,7 +18,7 @@ spec:
   workspaces:
     - name: source
       description: Workspace for cloned source code
-    # Note: Docker credentials are provided by tasks via harbor-registry-credentials secret
+    # Note: Docker credentials are provided by tasks via registry-credentials secret
 
   tasks:
     # Clone the repository
@@ -42,14 +42,14 @@ spec:
         name: kaniko-build
       params:
         - name: IMAGE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
         - name: DOCKERFILE
           value: Dockerfile.koshee
         - name: EXTRA_ARGS
           value:
             - --build-arg=TARGETARCH=amd64
             - --cache=true
-            - --cache-repo=harbor.kw.koshee.io/koshee/grafana-cache
+            - --cache-repo=registry.kw.koshee.io/koshee/grafana-cache
       workspaces:
         - name: source
           workspace: source
@@ -61,14 +61,14 @@ spec:
         name: kaniko-build
       params:
         - name: IMAGE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
         - name: DOCKERFILE
           value: Dockerfile.koshee
         - name: EXTRA_ARGS
           value:
             - --build-arg=TARGETARCH=arm64
             - --cache=true
-            - --cache-repo=harbor.kw.koshee.io/koshee/grafana-cache
+            - --cache-repo=registry.kw.koshee.io/koshee/grafana-cache
       workspaces:
         - name: source
           workspace: source
@@ -80,11 +80,11 @@ spec:
         name: crane-manifest
       params:
         - name: IMAGE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)
         - name: AMD64_IMAGE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)-amd64
         - name: ARM64_IMAGE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)-arm64
 
     # Tag as main for branch builds
     - name: tag-main
@@ -93,6 +93,6 @@ spec:
         name: crane-tag
       params:
         - name: SOURCE
-          value: harbor.kw.koshee.io/koshee/grafana:$(params.image-tag)
+          value: registry.kw.koshee.io/koshee/grafana:$(params.image-tag)
         - name: TARGET
-          value: harbor.kw.koshee.io/koshee/grafana:main
+          value: registry.kw.koshee.io/koshee/grafana:main

@@ -27,7 +27,7 @@ spec:
   volumes:
     - name: docker-config
       secret:
-        secretName: harbor-registry-credentials
+        secretName: registry-credentials
         items:
           - key: .dockerconfigjson
             path: config.json

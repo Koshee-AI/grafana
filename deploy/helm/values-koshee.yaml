@@ -4,7 +4,7 @@
 grafana:
   # Use Koshee-branded Grafana image from Harbor
   image:
-    registry: harbor.kw.koshee.io
+    registry: registry.kw.koshee.io
     repository: koshee/grafana
     tag: main  # Managed by ArgoCD Image Updater
     pullPolicy: IfNotPresent
