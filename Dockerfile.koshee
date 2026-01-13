@@ -4,14 +4,18 @@
 # =============================================================================
 # Stage 1: Frontend Build
 # =============================================================================
-FROM node:22-alpine AS frontend-builder
+# Using glibc-based image instead of alpine because tree-sitter npm binary
+# requires glibc (musl compatibility issue: https://github.com/tree-sitter/tree-sitter/issues/597)
+FROM node:22 AS frontend-builder
 
 ENV NODE_OPTIONS=--max_old_space_size=8000
 
 WORKDIR /grafana
 
 # Install build dependencies for native modules (tree-sitter, node-gyp, etc.)
-RUN apk add --no-cache git python3 make g++ gcc libc-dev linux-headers rust cargo
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git python3 make g++ gcc && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files first for better caching
 COPY package.json yarn.lock .yarnrc.yml ./
