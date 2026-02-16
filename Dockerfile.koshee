@@ -8,9 +8,9 @@
 # requires glibc (musl compatibility issue: https://github.com/tree-sitter/tree-sitter/issues/597)
 FROM --platform=$BUILDPLATFORM node:22 AS frontend-builder
 
-# Heap: 3GB — webpack needs >2GB for Grafana frontend. Frontend stage runs before Go,
-# so no concurrency concern. 3GB + BuildKit overhead fits well within 12GB container.
-ENV NODE_OPTIONS="--max-old-space-size=3072 --max-semi-space-size=64"
+# Heap: 4GB — Grafana webpack OOMs at both 2GB (hit 2029MB) and 3GB (hit 2991MB).
+# Frontend stage runs alone before Go, so 4GB + BuildKit fits in 12GB container.
+ENV NODE_OPTIONS="--max-old-space-size=4096 --max-semi-space-size=64"
 ENV NX_PARALLEL=1
 
 WORKDIR /grafana
@@ -39,6 +39,9 @@ COPY emails emails
 
 # Copy remaining source code
 COPY . .
+
+# Disable source maps to reduce webpack memory (~500MB-1GB savings)
+RUN sed -i "s/devtool: 'source-map'/devtool: false/" scripts/webpack/webpack.prod.js
 
 # Build frontend
 RUN yarn build
