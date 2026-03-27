@@ -218,6 +218,15 @@ public/api-spec.json
 
 deployment_tools_config.json
 
+# Local operator docs and workspace artifacts
+CLAUDE.md
+AGENTS.md
+STATUS.md
+plans/
+.upgradebot/
+ARGOCD-SETUP.md
+PLAN-UPDATES.md
+
 .betterer.cache
 .nx
 
